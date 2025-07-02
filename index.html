@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bạn đang ở phường/xã nào sau sáp nhập?</title>
+  <title>Phường gì Xã chi?</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
@@ -15,7 +16,7 @@
 <body class="bg-gray-100 text-gray-800 p-4">
   <div class="max-w-2xl mx-auto">
     <h1 class="text-3xl font-bold text-center mb-6 bg-clip-text text-transparent" style="background-image: linear-gradient(to right, #13294B, #B9A7F0);">
-      Bạn đang ở phường/xã nào sau sáp nhập?
+      Bạn là dân phường/xã nào sau sáp nhập?
     </h1>
 
     <div class="bg-white p-6 rounded-xl shadow-md">
@@ -30,6 +31,7 @@
 
   <script>
     let wardData = null;
+    let phuongData = [];
     let map = null;
     let layer = null;
 
@@ -37,6 +39,21 @@
       const res = await fetch("HCMC_v4.geojson");
       if (!res.ok) throw new Error("Không thể tải dữ liệu bản đồ");
       wardData = await res.json();
+    }
+
+    function loadTSV() {
+      return new Promise((resolve, reject) => {
+        Papa.parse("HCMC_data.tsv", {
+          header: true,
+          download: true,
+          delimiter: "\t",
+          complete: results => {
+            phuongData = results.data;
+            resolve();
+          },
+          error: err => reject(err)
+        });
+      });
     }
 
     function pointInPolygon([x, y], polygon) {
@@ -58,15 +75,16 @@
 
     function showResult(feature, latlng) {
       const props = feature.properties;
-      const loai = props['Loại'] || '';
-const ten = props['Tên'] || 'Không rõ';
-const name = `${loai} ${ten}`.trim();
+      const ten = props['Tên'] || 'Không rõ';
+      const record = phuongData.find(p => p['Tên'] === ten);
+      const loai = record?.['Loại'] || '';
+      const name = `${loai} ${ten}`.trim();
+
       document.getElementById("result").innerHTML = `
         <div class="bg-white p-4 rounded-lg shadow-md text-center">
           <h2 class="text-xl font-bold text-indigo-700">✅ Bạn đang ở: ${name}</h2>
         </div>`;
 
-      // Hiển thị bản đồ
       const mapDiv = document.getElementById("map");
       mapDiv.classList.remove("hidden");
       if (map) { map.remove(); map = null; }
@@ -98,7 +116,7 @@ const name = `${loai} ${ten}`.trim();
 
     document.getElementById("locationBtn").addEventListener("click", async () => {
       try {
-        if (!wardData) await loadWardData();
+        await Promise.all([loadWardData(), loadTSV()]);
         if (!navigator.geolocation) return alert("Trình duyệt không hỗ trợ định vị.");
 
         navigator.geolocation.getCurrentPosition(pos => {
